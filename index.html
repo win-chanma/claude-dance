@@ -51,9 +51,11 @@ input[type=range]{accent-color:var(--clay);width:min(140px,34vw)}
 .z.found{color:var(--cream)}
 .z.on{background:var(--sun);color:var(--ink);border-color:var(--sun)}
 output{font-variant-numeric:tabular-nums;font-weight:700;color:var(--cream);min-width:4.5em}
-.tray{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px 18px;background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:12px}
-.cat{display:grid;gap:8px;min-width:0}
-.cat h2{margin:0;font-size:11px;letter-spacing:.16em;color:var(--muted);font-weight:800}
+.tray{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.cat{display:grid;gap:10px;min-width:0;border:2px solid var(--cc);border-radius:16px;padding:10px 12px 12px;background:color-mix(in srgb,var(--cc) 13%,var(--panel))}
+.cat h2{margin:0;display:flex;align-items:center;flex-wrap:wrap;gap:4px 10px;font-size:11px;font-weight:700;color:var(--cream)}
+.cat h2 .tag{background:var(--cc);color:var(--ink);padding:3px 14px;border-radius:999px;font-family:var(--display);font-size:14px;font-weight:400;letter-spacing:.06em}
+.cat h2 small{font-size:11px;opacity:.8;letter-spacing:.03em}
 .icons{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:4px}
 .snd{display:grid;justify-items:center;gap:4px;background:none;border:0;color:var(--cream);font-family:var(--body);font-weight:700;font-size:11px;cursor:grab;padding:4px 0;border-radius:10px;touch-action:none;user-select:none;-webkit-user-select:none}
 .snd .ic{width:44px;height:44px;border-radius:50%;display:grid;place-items:center;background:var(--c);color:var(--ink);border:3px solid var(--ink);box-shadow:0 3px 0 var(--ink);font-size:18px;font-family:var(--display)}
@@ -284,10 +286,10 @@ function boing(t, bus){
 
 /* ================= 20種類の音（各音はパターン関数。鳴らしたら長さを返す） ================= */
 const CATS = [
-  {id:'beat',  name:'ビート',     acc:'cap'},
-  {id:'fx',    name:'エフェクト', acc:'shades'},
-  {id:'mel',   name:'メロディ',   acc:'phones'},
-  {id:'voice', name:'ボイス',     acc:'mic'},
+  {id:'beat',  name:'ビート',     acc:'cap',    color:'#ec8a5e', desc:'リズムを きざむ ・ ぼうしの子'},
+  {id:'fx',    name:'エフェクト', acc:'shades', color:'#9b8cff', desc:'ひくい音や こうか音 ・ サングラスの子'},
+  {id:'mel',   name:'メロディ',   acc:'phones', color:'#5fe3c0', desc:'ふしや わおん ・ ヘッドホンの子'},
+  {id:'voice', name:'ボイス',     acc:'mic',    color:'#ff8fb8', desc:'うたごえ ・ マイクの子'},
 ];
 const SOUNDS = [
   {id:'kick',  cat:'beat', name:'ドンドン',   glyph:'●', body:'#ec8a5e', acc:'#3b2a7a',
@@ -861,7 +863,8 @@ requestAnimationFrame(frame);
 const tray = $('#tray');
 for (const c of CATS){
   const box = document.createElement('div'); box.className = 'cat';
-  box.innerHTML = `<h2>${c.name}</h2><div class="icons"></div>`;
+  box.style.setProperty('--cc', c.color);
+  box.innerHTML = `<h2><span class="tag">${c.name}</span><small>${c.desc}</small></h2><div class="icons"></div>`;
   for (const S of SOUNDS.filter(s => s.cat === c.id)){
     const b = document.createElement('button');
     b.className = 'snd'; b.dataset.sid = S.id; b.style.setProperty('--c', S.body); b.setAttribute('aria-pressed', 'false');
