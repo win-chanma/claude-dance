@@ -44,12 +44,27 @@ input[type=range]{accent-color:var(--clay);width:min(140px,34vw)}
 .presets{display:flex;flex-wrap:wrap;gap:4px}
 .step{width:30px;height:30px;border-radius:50%;border:2px solid var(--ink);background:var(--cream);color:var(--ink);font-weight:800;font-size:16px;line-height:1;cursor:pointer;box-shadow:0 2px 0 var(--ink);padding:0}
 .step:active{transform:translateY(2px);box-shadow:none}
-.zukan{display:flex;flex-wrap:wrap;gap:6px 8px;align-items:center;font-size:12px;color:var(--muted)}
-.zukan h2{margin:0 4px 0 0;font-size:11px;letter-spacing:.16em;font-weight:800}
-.z{border:1.5px solid var(--line);border-radius:999px;padding:4px 10px;font-weight:700}
-.z small{opacity:.75;font-weight:500;margin-left:5px}
-.z.found{color:var(--cream)}
-.z.on{background:var(--sun);color:var(--ink);border-color:var(--sun)}
+.btn.book{background:var(--mint);position:relative}
+.btn.book.new::after{content:'NEW';position:absolute;top:-10px;right:-10px;background:var(--pink);color:var(--ink);font-size:10px;border:2px solid var(--ink);border-radius:999px;padding:1px 6px}
+.modal{position:fixed;inset:0;z-index:20;display:grid;place-items:center;background:rgba(8,5,13,.74);padding:16px}
+.sheet{width:min(560px,100%);max-height:min(82vh,660px);overflow:auto;background:var(--panel);border:2px solid var(--sun);border-radius:20px;padding:16px 18px 18px;box-shadow:0 20px 60px rgba(0,0,0,.6);box-sizing:border-box;animation:popin .18s ease-out}
+@keyframes popin{from{transform:scale(.92);opacity:0}to{transform:none;opacity:1}}
+@media (prefers-reduced-motion:reduce){.sheet{animation:none}}
+.sheet header{align-items:center;flex-wrap:nowrap;justify-content:flex-start;gap:10px}
+.sheet h2{margin:0;font-family:var(--display);font-weight:400;font-size:20px}
+.sheet .cnt{color:var(--sun);font-weight:800;font-variant-numeric:tabular-nums}
+.sheet #zclose{margin-left:auto;flex:none}
+.sheet .lead{margin:6px 0 12px;font-size:12px;color:var(--muted)}
+.zgrid{display:grid;gap:8px}
+.zc{display:flex;align-items:center;gap:6px 12px;flex-wrap:wrap;border:1.5px solid var(--line);border-radius:12px;padding:8px 12px}
+.zc .nm{font-family:var(--display);font-size:15px;min-width:9em}
+.zc.lock .nm{color:var(--muted)}
+.zc .need{display:flex;flex-wrap:wrap;gap:4px 6px;align-items:center;font-size:12px;font-weight:700;color:var(--cream)}
+.zc .dot{width:24px;height:24px;border-radius:50%;display:grid;place-items:center;background:var(--c);color:var(--ink);border:2px solid var(--ink);font-size:11px;font-family:var(--display)}
+.zc .tagc{border-radius:999px;padding:2px 10px;background:var(--c);color:var(--ink);font-weight:800;font-size:11px}
+.zc .plus{color:var(--muted)}
+.zc .st{margin-left:auto;font-size:11px;font-weight:800;color:var(--ink);background:var(--sun);border-radius:999px;padding:2px 9px}
+.zc.on{border-color:var(--sun);background:color-mix(in srgb,var(--sun) 14%,transparent)}
 output{font-variant-numeric:tabular-nums;font-weight:700;color:var(--cream);min-width:4.5em}
 .tray{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
 .cat{display:grid;gap:10px;min-width:0;border:2px solid var(--cc);border-radius:16px;padding:10px 12px 12px;background:color-mix(in srgb,var(--cc) 13%,var(--panel))}
@@ -91,6 +106,7 @@ button:focus-visible,input:focus-visible{outline:3px solid var(--sun);outline-of
     <button class="btn" id="play">▶ 再生</button>
     <button class="btn alt" id="random">おまかせ</button>
     <button class="btn ghost" id="reset">リセット</button>
+    <button class="btn book" id="zbtn" aria-haspopup="dialog">図鑑 <span id="zcount">0/9</span></button>
     <div class="tempo"><label for="tempo">テンポ</label>
       <div class="presets" id="presets">
         <button class="chip" data-bpm="96" aria-pressed="false">ゆっくり</button>
@@ -106,8 +122,14 @@ button:focus-visible,input:focus-visible{outline:3px solid var(--sun);outline-of
   </div>
 
   <section class="tray" id="tray" aria-label="音アイコン"></section>
-  <section class="zukan" aria-label="えんしゅつ図鑑"><h2>えんしゅつ図鑑 <span id="zcount"></span></h2><div class="zukan" id="zlist"></div></section>
   <p class="secret" id="secret"><b>？</b> ウワサ：なまえの さいごを「<b>ー</b>」と のばす 3人が、<b>あいうえお じゅん</b>に となりどうしで ならぶと、夜が うらがえるらしい…</p>
+  <div class="modal" id="zmodal" hidden>
+    <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="ztitle">
+      <header><h2 id="ztitle">えんしゅつ図鑑</h2><span class="cnt" id="zcount2"></span><button class="step" id="zclose" aria-label="とじる">×</button></header>
+      <p class="lead">音を くみあわせると ステージの えんしゅつが かわるよ。ぜんぶ みつけられるかな?</p>
+      <div class="zgrid" id="zlist"></div>
+    </div>
+  </div>
 </div>
 
 <script>
@@ -477,18 +499,24 @@ const fxOn = new Set();
 let found = new Set();
 try { found = new Set(JSON.parse(localStorage.getItem('cd-combos') || '[]')); } catch (e) {}
 function renderZukan(){
-  $('#zcount').textContent = `${COMBOS.filter(c => found.has(c.id)).length}/${COMBOS.length}`;
-  $('#zlist').innerHTML = COMBOS.map(c => found.has(c.id)
-    ? `<span class="z found${fxOn.has(c.id) ? ' on' : ''}">${c.name}<small>${c.need.map(id => SBY[id].name).join('＋')}</small></span>`
-    : `<span class="z">？？？<small>${c.need.map(id => CBY[SBY[id].cat].name).join('＋')}</small></span>`).join('');
+  const n = COMBOS.filter(c => found.has(c.id)).length;
+  $('#zcount').textContent = $('#zcount2').textContent = `${n}/${COMBOS.length}`;
+  $('#zlist').innerHTML = COMBOS.map(c => {
+    const f = found.has(c.id), on = fxOn.has(c.id);
+    const need = c.need.map(id => { const S = SBY[id], C = CBY[S.cat];
+      return f ? `<span class="dot" style="--c:${S.body}">${S.glyph}</span>${S.name}` : `<span class="tagc" style="--c:${C.color}">${C.name}</span>`; }).join('<span class="plus">＋</span>');
+    return `<div class="zc${f ? '' : ' lock'}${on ? ' on' : ''}"><span class="nm">${f ? c.name : '？？？'}</span><span class="need">${need}</span>${on ? '<span class="st">はつどう中</span>' : ''}</div>`;
+  }).join('');
 }
+function openZukan(){ renderZukan(); $('#zmodal').hidden = false; $('#zbtn').classList.remove('new'); $('#zclose').focus(); }
+function closeZukan(){ if ($('#zmodal').hidden) return; $('#zmodal').hidden = true; $('#zbtn').focus(); }
 function updateCombos(){
   const on = new Set(slots.filter(s => s.sid && !s.muted).map(s => s.sid));
   for (const c of COMBOS){
     const act = c.need.every(id => on.has(id));
     if (act && !fxOn.has(c.id)){
       fxOn.add(c.id); callout(c.name + '!'); spawn(20, W/2, H*0.3, 'star', 1.3);
-      if (!found.has(c.id)){ found.add(c.id); try { localStorage.setItem('cd-combos', JSON.stringify([...found])); } catch (e) {} }
+      if (!found.has(c.id)){ found.add(c.id); $('#zbtn').classList.add('new'); try { localStorage.setItem('cd-combos', JSON.stringify([...found])); } catch (e) {} }
     } else if (!act) fxOn.delete(c.id);
   }
   renderZukan();
@@ -943,6 +971,10 @@ $('#tempo').oninput = e => setTempo(+e.target.value);
 $('#presets').onclick = e => { const b = e.target.closest('[data-bpm]'); if (b) setTempo(+b.dataset.bpm); };
 $('#slower').onclick = () => setTempo(bpm - 10);
 $('#faster').onclick = () => setTempo(bpm + 10);
+$('#zbtn').onclick = openZukan;
+$('#zclose').onclick = closeZukan;
+$('#zmodal').addEventListener('pointerdown', e => { if (e.target === e.currentTarget) closeZukan(); });
+addEventListener('keydown', e => { if (e.key === 'Escape') closeZukan(); });
 renderZukan();
 addEventListener('keydown', e => {
   if (e.key === ' ' && e.target === document.body){ e.preventDefault(); $('#play').click(); }
