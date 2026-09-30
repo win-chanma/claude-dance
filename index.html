@@ -19,6 +19,7 @@ body{margin:0}[hidden]{display:none!important}
   --body:"M PLUS Rounded 1c","Hiragino Maru Gothic ProN","Yu Gothic",sans-serif;
   color-scheme:dark;
 }
+:root.ura{--night:#08050d;--stage:#0e0714;--panel:#150a1c;--line:#40183a;--clay:#c2414f;--mint:#8cff9e;--sun:#c9f76a;--muted:#8f7aa6}
 html,body{height:100%}
 body{background:var(--night);color:var(--cream);font-family:var(--body);font-size:14px}
 .app{user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;-webkit-tap-highlight-color:transparent;min-height:100%;display:flex;flex-direction:column;gap:12px;padding-block:12px;padding-inline:16px;max-width:1100px;margin:0 auto;box-sizing:border-box}
@@ -49,6 +50,11 @@ output{font-variant-numeric:tabular-nums;font-weight:700;color:var(--cream);min-
 .snd.used .ic{box-shadow:none;transform:translateY(3px)}
 .snd .nm{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
 .ghostIcon{position:fixed;z-index:10;pointer-events:none;width:48px;height:48px;border-radius:50%;display:grid;place-items:center;border:3px solid var(--ink);color:var(--ink);font-family:var(--display);font-size:20px;transform:translate(-50%,-50%) scale(1.15);box-shadow:0 6px 14px rgba(0,0,0,.5)}
+.secret{margin:0;font-size:12px;color:var(--muted);text-align:center;letter-spacing:.06em}
+.secret b{color:var(--sun);font-weight:800}
+:root.ura h1{animation:shiver 2.4s steps(2) infinite}
+@keyframes shiver{0%,92%{transform:none}94%{transform:translate(2px,-1px) skewX(-4deg)}97%{transform:translate(-2px,1px) skewX(3deg)}}
+@media (prefers-reduced-motion:reduce){:root.ura h1{animation:none}}
 button:focus-visible,input:focus-visible{outline:3px solid var(--sun);outline-offset:2px}
 @media (max-width:900px){.tray{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media (max-width:560px){.tray{grid-template-columns:1fr}}
@@ -59,7 +65,7 @@ button:focus-visible,input:focus-visible{outline:3px solid var(--sun);outline-of
 
 <div class="app">
   <header>
-    <h1>Claudeくん<span>ダンス</span></h1>
+    <h1>Claudeくん<span id="ttl">ダンス</span></h1>
     <div class="meta" id="meta">Opus 5.5 Groove · ♩=<b>124</b> · C major</div>
   </header>
 
@@ -76,6 +82,7 @@ button:focus-visible,input:focus-visible{outline:3px solid var(--sun);outline-of
   </div>
 
   <section class="tray" id="tray" aria-label="音アイコン"></section>
+  <p class="secret" id="secret"><b>？</b> ウワサ：なまえの さいごを「<b>ー</b>」と のばす子が 3人そろうと、夜が うらがえるらしい…</p>
 </div>
 
 <script>
@@ -101,8 +108,23 @@ const MEL = [
   [81,0,79,0,76,0,79,0, 0,0,0,0,84,0,83,0],
 ];
 
+// ウラモード用：Aマイナー（和声的短音階）の進行とメロディ
+const PROG_U = [
+  {name:'Am', root:45, ch:[57,60,64,69]},
+  {name:'F',  root:41, ch:[53,57,60,65]},
+  {name:'Dm', root:38, ch:[50,53,57,62]},
+  {name:'E',  root:40, ch:[52,56,59,64]},
+];
+const MEL_U = [
+  [76,0,0,0,72,0,0,0, 69,0,0,0,72,0,71,0],
+  [72,0,0,0,69,0,0,0, 65,0,0,0,69,0,72,0],
+  [74,0,0,0,77,0,0,0, 74,0,0,0,69,0,0,0],
+  [68,0,71,0,76,0,80,0, 0,0,76,0,0,0,68,0],
+];
+let ura = false;
+
 /* ================= シンセ ================= */
-let ac = null, master, analyser, freqData, noiseBuf, verb, delay;
+let ac = null, master, analyser, freqData, noiseBuf, verb, delay, tone, verbGain;
 const buses = {};
 const mtof = m => 440 * Math.pow(2, (m-69)/12);
 function impulse(sec, decay){
@@ -269,7 +291,7 @@ const SOUNDS = [
   {id:'scr',   cat:'fx', name:'キュキュッ',   glyph:'※', body:'#c08cf5', acc:'#ffd166',
     play:(s,bar,t,sd,P,bus) => { if (s === 8 || s === 10 || (bar%2 && s === 11)){ scratch(t, sd*(s === 8 ? 1.8 : 0.9), bus); return sd*2; } }},
   {id:'lead',  cat:'mel', name:'メロディ',    glyph:'♪', body:'#4fd1a5', acc:'#ec8a5e',
-    play:(s,bar,t,sd,P,bus) => { const row = MEL[bar], m = row[s]; if (!m) return;
+    play:(s,bar,t,sd,P,bus) => { const row = (ura ? MEL_U : MEL)[bar], m = row[s]; if (!m) return;
       let len = 1; while (len < 4 && s+len < 16 && !row[s+len]) len++; lead(t, m, sd*len*0.9, bus); return sd*len; }},
   {id:'chord', cat:'mel', name:'コード',      glyph:'♬', body:'#3fb8a0', acc:'#ffd166',
     play:(s,bar,t,sd,P,bus) => { if ([0,3,6,8,11,14].includes(s)){ stab(t, P.ch, sd*1.6, bus); return sd*1.5; } }},
@@ -282,11 +304,11 @@ const SOUNDS = [
   {id:'doo',   cat:'voice', name:'ドゥー',    glyph:'u', body:'#ff8fb8', acc:'#3b2a7a',
     play:(s,bar,t,sd,P,bus) => { const at = {0:[0,5], 6:[7,3], 10:[12,5]}; if (s in at){ const [o, l] = at[s]; voice(t, P.root+12+o, sd*l, 'u', bus, 0.35); return sd*l; } }},
   {id:'hey',   cat:'voice', name:'ヘイ!',     glyph:'!', body:'#ff6f8e', acc:'#ffd166',
-    play:(s,bar,t,sd,P,bus) => { if (s === 14){ hey(t, bus); return sd*2; } if (bar%2 && s === 6){ hey(t, bus, 1.25); return sd*2; } }},
+    play:(s,bar,t,sd,P,bus) => { const k = ura ? 0.55 : 1; if (s === 14){ hey(t, bus, k); return sd*2; } if (bar%2 && s === 6){ hey(t, bus, 1.25*k); return sd*2; } }},
   {id:'aah',   cat:'voice', name:'アー',      glyph:'a', body:'#f7b0e0', acc:'#5fe3c0',
     play:(s,bar,t,sd,P,bus) => { if (s === 0){ for (const i of [1, 3]) voice(t, P.ch[i]+12, sd*15, 'a', bus, 0.12); return sd*15; } }},
   {id:'opus',  cat:'voice', name:'オーパス',  glyph:'O', body:'#ffd166', acc:'#e0664f',
-    play:(s,bar,t,sd,P,bus) => { const n = bar === 3 ? 71 : 67;
+    play:(s,bar,t,sd,P,bus) => { const n = ura ? (bar === 3 ? 68 : 69) : (bar === 3 ? 71 : 67);
       if (s === 0 || s === 8){ voice(t, n, sd*2, 'o', bus, 0.4); return sd*2; }
       if (s === 2 || s === 10){ noise(t, 0.015, 'lowpass', 1200, 1, 0.3, bus); voice(t, n-3, sd, 'a', bus, 0.4); return sd; }
       if (s === 3 || s === 11) noise(t, 0.09, 'highpass', 5000, 0.7, 0.18, bus); }},
@@ -302,11 +324,12 @@ function initAudio(){
   const comp = ac.createDynamicsCompressor(); comp.threshold.value = -14; comp.ratio.value = 4;
   master = ac.createGain(); master.gain.value = 0.75;
   analyser = ac.createAnalyser(); analyser.fftSize = 256; freqData = new Uint8Array(analyser.frequencyBinCount);
-  master.connect(comp); comp.connect(analyser); analyser.connect(ac.destination);
+  tone = ac.createBiquadFilter(); tone.type = 'lowpass'; tone.frequency.value = ura ? 1700 : 18000;
+  master.connect(tone); tone.connect(comp); comp.connect(analyser); analyser.connect(ac.destination);
   noiseBuf = ac.createBuffer(1, ac.sampleRate, ac.sampleRate);
   const nd = noiseBuf.getChannelData(0); for (let i=0;i<nd.length;i++) nd[i] = Math.random()*2-1;
   verb = ac.createConvolver(); verb.buffer = impulse(1.8, 2.5);
-  const vg = ac.createGain(); vg.gain.value = 0.25; verb.connect(vg); vg.connect(master);
+  verbGain = ac.createGain(); verbGain.gain.value = ura ? 0.6 : 0.25; verb.connect(verbGain); verbGain.connect(master);
   delay = ac.createDelay(1); const fb = ac.createGain(); fb.gain.value = 0.3; const dg = ac.createGain(); dg.gain.value = 0.25;
   delay.connect(fb); fb.connect(delay); delay.connect(dg); dg.connect(master);
   for (const S of SOUNDS){
@@ -326,7 +349,7 @@ function setDelayTime(){ if (ac) delay.delayTime.setTargetAtTime(0.75*60/bpm, ac
 const timeOfBeat = b => anchor.time + (b - anchor.beat)*60/bpm;
 const beatAt = t => anchor.beat + (t - anchor.time)*bpm/60;
 function schedule(step, t){
-  const s = mod(step, 16), bar = mod(Math.floor(step/16), 4), P = PROG[bar], sd = 60/bpm/4;
+  const s = mod(step, 16), bar = mod(Math.floor(step/16), 4), P = (ura ? PROG_U : PROG)[bar], sd = 60/bpm/4;
   slots.forEach((sl, i) => {
     if (!sl.sid || sl.muted) return;
     const d = SBY[sl.sid].play(s, bar, t, sd, P, buses[sl.sid]);
@@ -402,11 +425,29 @@ function refresh(){
   const full = used.size === 7;
   if (full && !lastFull){ callout('フルバンド!!'); spawn(50, W/2, H*0.25, 'confetti', 1.8); }
   lastFull = full;
+  if (!ura && URA_KEY.every(id => slots.some(s => s.sid === id && !s.muted))) setUra(true);
   for (const c of CATS){
     const done = SOUNDS.filter(s => s.cat === c.id).every(s => used.has(s.id));
     if (done && !lastCatDone[c.id]){ callout(`${c.name}コンプリート!`); spawn(30, W/2, H*0.3, 'confetti', 1.4); }
     lastCatDone[c.id] = done;
   }
+}
+const URA_KEY = ['doo', 'aah', 'pad'];
+function setUra(on){
+  if (ura === on) return;
+  ura = on;
+  document.documentElement.classList.toggle('ura', on);
+  $('#ttl').textContent = on ? 'ウラダンス' : 'ダンス';
+  $('#secret').innerHTML = on ? '<b>！</b> ウラモード中… 「リセット」を おすと もとの世界に もどれるよ'
+                              : '<b>？</b> ウワサ：なまえの さいごを「<b>ー</b>」と のばす子が 3人そろうと、夜が うらがえるらしい…';
+  if (ac){
+    const t = ac.currentTime;
+    tone.frequency.setTargetAtTime(on ? 1700 : 18000, t, 0.3);
+    verbGain.gain.setTargetAtTime(on ? 0.6 : 0.25, t, 0.3);
+    if (on){ noise(t, 1.4, 'lowpass', 260, 0.7, 0.9, buses.ui); kick(t, buses.ui, true); }
+    else [84, 88, 91, 96].forEach((m, i) => bell(t + i*0.06, m, buses.ui, 0.12, 0.7));
+  }
+  flash = 3; callout(on ? 'ウラモード…' : 'もとの世界!');
 }
 const isFever = () => playing && slots.every(s => s.sid && !s.muted);
 
@@ -429,6 +470,9 @@ function slotLayout(){
 }
 function horizon(){ return (W < 560 ? 0.34 : 0.54)*H; }
 
+function mix(a, c, k){ const A = parseInt(a.slice(1), 16), C = parseInt(c.slice(1), 16);
+  const ch = sh => Math.round(((A>>sh)&255) + (((C>>sh)&255) - ((A>>sh)&255))*k);
+  return '#' + ((1<<24) | (ch(16)<<16) | (ch(8)<<8) | ch(0)).toString(16).slice(1); }
 function lighten(hex, k){ const n = parseInt(hex.slice(1), 16); const c = [n>>16, (n>>8)&255, n&255].map(v => Math.round(v + (255-v)*k)); return `rgb(${c})`; }
 function star4(x, y, r, rot){
   g.beginPath();
@@ -496,7 +540,14 @@ function drawChar(L, p, look, i){
   // face
   const ey = -bodyC - R*0.08, ex = R*0.34;
   g.fillStyle = OL; g.strokeStyle = OL;
-  if (look.acc !== 'shades'){
+  if (look.ura && look.acc !== 'shades'){
+    for (const s of [-1, 1]){
+      g.save(); g.shadowColor = '#8cff9e'; g.shadowBlur = R*0.35; g.fillStyle = p.eyes === 'closed' ? '#5a6b5e' : '#eaffea';
+      g.beginPath(); g.arc(s*ex, ey, R*0.16, 0, Math.PI*2); g.fill(); g.restore();
+      g.strokeStyle = OL; g.lineWidth = lw*0.8; g.beginPath(); g.arc(s*ex, ey, R*0.16, 0, Math.PI*2); g.stroke();
+      g.fillStyle = OL; g.beginPath(); g.arc(s*ex + Math.sin(T*9 + i + s)*R*0.03, ey + Math.cos(T*7 + i)*R*0.03, R*0.04, 0, Math.PI*2); g.fill();
+    }
+  } else if (look.acc !== 'shades'){
     for (const s of [-1, 1]){
       if (p.eyes === 'happy'){ g.lineWidth = lw*1.2; g.beginPath(); g.arc(s*ex, ey + R*0.06, R*0.12, Math.PI*1.15, Math.PI*1.85); g.stroke(); }
       else if (p.eyes === 'closed'){ g.lineWidth = lw; g.beginPath(); g.arc(s*ex, ey - R*0.02, R*0.1, Math.PI*0.15, Math.PI*0.85); g.stroke(); }
@@ -507,11 +558,12 @@ function drawChar(L, p, look, i){
       }
     }
   }
-  g.fillStyle = 'rgba(255,111,174,0.5)';
+  g.fillStyle = look.ura ? 'rgba(0,0,0,0)' : 'rgba(255,111,174,0.5)';
   for (const s of [-1, 1]){ g.beginPath(); g.ellipse(s*R*0.6, -bodyC + R*0.16, R*0.14, R*0.08, 0, 0, Math.PI*2); g.fill(); }
   const my = -bodyC + R*0.26, open = Math.max(0, Math.min(1, p.mouth));
   g.lineWidth = lw; g.strokeStyle = OL;
-  if (open < 0.15){ g.beginPath(); g.moveTo(-R*0.14, my); g.quadraticCurveTo(0, my + R*0.12, R*0.14, my); g.stroke(); }
+  if (open < 0.15 && look.ura){ g.beginPath(); for (let k = 0; k <= 6; k++) g.lineTo(-R*0.2 + k*R*0.0667, my + R*0.06 + (k%2 ? R*0.07 : 0)); g.stroke(); }
+  else if (open < 0.15){ g.beginPath(); g.moveTo(-R*0.14, my); g.quadraticCurveTo(0, my + R*0.12, R*0.14, my); g.stroke(); }
   else {
     g.fillStyle = '#7a2330'; g.beginPath(); g.moveTo(-R*0.18, my); g.quadraticCurveTo(0, my + R*(0.12 + 0.26*open), R*0.18, my); g.closePath(); g.fill(); g.stroke();
     if (open > 0.4){ g.fillStyle = '#ff8fa3'; g.beginPath(); g.ellipse(0, my + R*(0.05 + 0.1*open), R*0.08, R*0.045, 0, 0, Math.PI*2); g.fill(); }
@@ -528,6 +580,8 @@ function drawChar(L, p, look, i){
     g.beginPath(); g.moveTo(-ex + R*0.2, ey - R*0.03); g.lineTo(ex - R*0.2, ey - R*0.03); g.stroke();
     g.strokeStyle = look.accColor; g.lineWidth = lw*0.8;
     for (const s of [-1, 1]){ g.beginPath(); g.moveTo(s*ex - R*0.1, ey - R*0.06); g.lineTo(s*ex - R*0.02, ey - R*0.1); g.stroke(); }
+    if (look.ura){ g.save(); g.shadowColor = '#ff3355'; g.shadowBlur = R*0.3; g.fillStyle = '#ff5566';
+      for (const s of [-1, 1]){ g.beginPath(); g.arc(s*ex, ey, R*0.05, 0, Math.PI*2); g.fill(); } g.restore(); }
   } else if (look.acc === 'phones'){
     g.beginPath(); g.arc(0, -bodyC, R*1.04, Math.PI*1.13, Math.PI*1.87);
     g.strokeStyle = OL; g.lineWidth = R*0.14; g.stroke(); g.strokeStyle = look.accColor; g.lineWidth = R*0.14 - lw*1.4; g.stroke();
@@ -538,7 +592,7 @@ function drawChar(L, p, look, i){
   if (look.acc !== 'cap'){
     g.beginPath(); g.moveTo(0, -bodyC - R*0.93); g.quadraticCurveTo(0, -bodyC - R*1.15, tipX, tipY);
     g.strokeStyle = OL; g.lineWidth = lw; g.stroke();
-    star4(tipX, tipY, R*0.2*(1 + 0.35*flash*(look.active ? 1 : 0)), T*2 + i); g.fillStyle = look.active ? '#ffd166' : '#8b84ad'; g.fill(); g.strokeStyle = OL; g.lineWidth = lw*0.8; g.stroke();
+    star4(tipX, tipY, R*0.2*(1 + 0.35*flash*(look.active ? 1 : 0)), T*2 + i); g.fillStyle = look.active ? (look.ura ? '#8cff9e' : '#ffd166') : '#8b84ad'; g.fill(); g.strokeStyle = OL; g.lineWidth = lw*0.8; g.stroke();
   }
   // arms
   for (const side of [-1, 1]){
@@ -562,31 +616,37 @@ function drawScene(b, dt){
   g.setTransform(DPR, 0, 0, DPR, 0, 0);
   const fever = isFever(), hz = horizon();
   const sky = g.createLinearGradient(0, 0, 0, hz);
-  sky.addColorStop(0, '#120c2b'); sky.addColorStop(1, fever ? '#4a1f6b' : '#2c1f63');
+  sky.addColorStop(0, ura ? '#050308' : '#120c2b'); sky.addColorStop(1, ura ? '#3a0a1c' : fever ? '#4a1f6b' : '#2c1f63');
   g.fillStyle = sky; g.fillRect(0, 0, W, hz);
   for (const s of skyStars){ g.fillStyle = `rgba(255,243,227,${0.25 + 0.35*Math.sin(T*2 + s.p)**2})`; g.beginPath(); g.arc(s.x*W, s.y*hz*1.6, s.r, 0, Math.PI*2); g.fill(); }
+  if (ura){
+    const mx = W*0.82, my = hz*0.3, mr = Math.max(22, Math.min(W, H)*0.07);
+    g.save(); g.shadowColor = '#ff4466'; g.shadowBlur = mr*1.2; g.fillStyle = '#e9b3a0'; g.beginPath(); g.arc(mx, my, mr, 0, Math.PI*2); g.fill(); g.restore();
+    g.fillStyle = 'rgba(120,40,50,0.35)';
+    for (const [dx, dy, r] of [[-0.3,-0.2,0.22],[0.35,0.1,0.16],[-0.05,0.45,0.13]]){ g.beginPath(); g.arc(mx + dx*mr, my + dy*mr, r*mr, 0, Math.PI*2); g.fill(); }
+  }
   // equalizer
   if (analyser) analyser.getByteFrequencyData(freqData);
   const n = 36, bw = W/n;
   for (let i=0;i<n;i++){
     const v = freqData ? freqData[2 + Math.floor(i*1.6)]/255 : 0, h = Math.pow(v, 1.5)*hz*0.8 + 3;
-    g.fillStyle = fever ? `hsla(${(i*10 + T*200) % 360},90%,65%,0.28)` : (i % 2 ? 'rgba(95,227,192,0.16)' : 'rgba(236,138,94,0.2)');
+    g.fillStyle = ura ? (i % 2 ? 'rgba(140,255,158,0.13)' : 'rgba(194,65,79,0.28)') : fever ? `hsla(${(i*10 + T*200) % 360},90%,65%,0.28)` : (i % 2 ? 'rgba(95,227,192,0.16)' : 'rgba(236,138,94,0.2)');
     g.fillRect(i*bw + 2, hz - h, bw - 4, h);
   }
   // spotlights
   g.globalCompositeOperation = 'lighter';
-  const SP = ['255,111,174', '95,227,192', '255,209,102'];
+  const SP = ura ? ['140,255,158', '194,65,79', '120,80,200'] : ['255,111,174', '95,227,192', '255,209,102'];
   for (let i=0;i<3;i++){
     const x0 = W*(0.15 + 0.35*i), sw = b == null ? T*0.5 : b*Math.PI/4, a = Math.sin(sw + i*2.1)*0.45, len = H*1.15, half = 0.17;
     g.save(); g.translate(x0, -20); g.rotate(a);
     const gr = g.createLinearGradient(0, 0, 0, len);
-    gr.addColorStop(0, `rgba(${SP[i]},${0.26 + flash*0.22})`); gr.addColorStop(1, `rgba(${SP[i]},0)`);
+    gr.addColorStop(0, `rgba(${SP[i]},${(ura ? 0.13 : 0.26) + Math.min(1, flash)*0.22})`); gr.addColorStop(1, `rgba(${SP[i]},0)`);
     g.fillStyle = gr; g.beginPath(); g.moveTo(-6, 0); g.lineTo(6, 0); g.lineTo(Math.tan(half)*len, len); g.lineTo(-Math.tan(half)*len, len); g.closePath(); g.fill();
     g.restore();
   }
   g.globalCompositeOperation = 'source-over';
   // floor
-  g.fillStyle = '#18113a'; g.fillRect(0, hz, W, H - hz);
+  g.fillStyle = ura ? '#0c0712' : '#18113a'; g.fillRect(0, hz, W, H - hz);
   const rows = 7, cols = 12, bi = b == null ? Math.floor(T*1.2) : Math.floor(b);
   for (let r=0;r<rows;r++){
     const y0 = hz + (H - hz)*Math.pow(r/rows, 1.6), y1 = hz + (H - hz)*Math.pow((r+1)/rows, 1.6);
@@ -595,10 +655,17 @@ function drawScene(b, dt){
       const u0 = c/cols - 0.5, u1 = (c+1)/cols - 0.5;
       g.beginPath(); g.moveTo(W/2 + u0*W*s0, y0); g.lineTo(W/2 + u1*W*s0, y0); g.lineTo(W/2 + u1*W*s1, y1); g.lineTo(W/2 + u0*W*s1, y1); g.closePath();
       const on = mod(r + c + bi, 2) === 0;
-      g.fillStyle = fever ? `hsla(${(c*30 + r*25 + T*240) % 360},90%,60%,${on ? 0.45 : 0.12})`
-                          : on ? `rgba(236,138,94,${0.1 + flash*0.3})` : 'rgba(95,227,192,0.05)';
+      const fl = Math.min(1, flash);
+      g.fillStyle = ura ? (fever ? (on ? `rgba(140,255,158,${0.12 + fl*0.35})` : 'rgba(194,65,79,0.22)') : on ? `rgba(194,65,79,${0.1 + fl*0.3})` : 'rgba(140,255,158,0.03)')
+                  : fever ? `hsla(${(c*30 + r*25 + T*240) % 360},90%,60%,${on ? 0.45 : 0.12})`
+                          : on ? `rgba(236,138,94,${0.1 + fl*0.3})` : 'rgba(95,227,192,0.05)';
       g.fill(); g.strokeStyle = 'rgba(255,243,227,0.07)'; g.lineWidth = 1; g.stroke();
     }
+  }
+  if (ura){
+    const fog = g.createLinearGradient(0, hz - 50, 0, hz + 110);
+    fog.addColorStop(0, 'rgba(200,255,210,0)'); fog.addColorStop(0.45, `rgba(200,255,210,${0.1 + 0.04*Math.sin(T*0.8)})`); fog.addColorStop(1, 'rgba(200,255,210,0)');
+    g.fillStyle = fog; g.fillRect(0, hz - 50, W, 160);
   }
   // performers
   const LAY = slotLayout();
@@ -607,13 +674,14 @@ function drawScene(b, dt){
     // floor spot
     g.save(); g.globalCompositeOperation = 'lighter';
     const spot = g.createRadialGradient(L.x, L.gy, 0, L.x, L.gy, L.R*1.5);
-    const sc = S && !sl.muted && playing ? `rgba(255,209,102,${0.18 + sl.hit*0.3})` : 'rgba(155,140,255,0.08)';
+    const sc = S && !sl.muted && playing ? `rgba(${ura ? '140,255,158' : '255,209,102'},${0.18 + sl.hit*0.3})` : 'rgba(155,140,255,0.08)';
     spot.addColorStop(0, sc); spot.addColorStop(1, 'rgba(0,0,0,0)');
     g.fillStyle = spot; g.beginPath(); g.ellipse(L.x, L.gy, L.R*1.5, L.R*0.45, 0, 0, Math.PI*2); g.fill(); g.restore();
     if (dragHover === i){ g.strokeStyle = '#ffd166'; g.lineWidth = 3; g.setLineDash([6, 5]); g.beginPath(); g.ellipse(L.x, L.gy - L.R*1.3, L.R*1.45, L.R*1.9, 0, 0, Math.PI*2); g.stroke(); g.setLineDash([]); }
     const look = S ? {body:S.body, light:lighten(S.body, 0.45), dark:lighten(S.body, -0.0), acc:CBY[S.cat].acc, accColor:S.acc, glyph:S.glyph, alpha:(drag && drag.moved && drag.from === i) ? 0.25 : sl.muted ? 0.45 : 1, active:!sl.muted, pop:sl.pop}
                    : {body:'#6f6899', light:'#9d97c4', dark:'#5d5787', acc:null, accColor:null, glyph:'', alpha:0.9, active:false, pop:sl.pop};
     if (S) look.dark = S.body;
+    if (ura){ look.ura = true; look.body = look.dark = mix(look.body, '#2e2440', 0.62); look.light = mix(look.body, '#cfe8d4', 0.35); if (look.accColor) look.accColor = mix(look.accColor, '#2e2440', 0.45); }
     drawChar(L, poseFor(sl, i, b ?? 0), look, i);
     // label
     g.font = `700 ${Math.max(10, L.R*0.26)}px "M PLUS Rounded 1c",sans-serif`; g.textAlign = 'center'; g.textBaseline = 'top';
@@ -625,13 +693,24 @@ function drawScene(b, dt){
   for (let i = particles.length - 1; i >= 0; i--){
     const p = particles[i]; p.life += dt;
     if (p.life > p.max){ particles.splice(i, 1); continue; }
-    p.vy += (p.kind === 'note' ? -30 : 420)*dt; p.x += p.vx*dt; p.y += p.vy*dt; p.rot += p.vr*dt;
+    p.vy += (p.kind === 'note' ? -30 : p.kind === 'ghost' ? 0 : 420)*dt; p.x += p.vx*dt; p.y += p.vy*dt; p.rot += p.vr*dt;
     if (p.kind === 'note'){ p.vx *= 0.96; p.vy = Math.max(p.vy, -140); }
-    g.save(); g.globalAlpha = 1 - p.life/p.max; g.translate(p.x, p.y); g.rotate(p.kind === 'note' ? Math.sin(p.rot)*0.3 : p.rot);
+    g.save(); g.globalAlpha = p.kind === 'ghost' ? Math.sin(Math.PI*p.life/p.max)*0.7 : 1 - p.life/p.max; g.translate(p.x + (p.kind === 'ghost' ? Math.sin(p.rot)*14 : 0), p.y); g.rotate(p.kind === 'note' || p.kind === 'ghost' ? Math.sin(p.rot)*0.3 : p.rot);
     if (p.kind === 'confetti'){ g.fillStyle = p.color; g.fillRect(-p.size/2, -p.size/4, p.size, p.size/2); }
     else if (p.kind === 'star'){ star4(0, 0, p.size, 0); g.fillStyle = p.color; g.fill(); }
+    else if (p.kind === 'ghost'){
+      const z = p.size; g.fillStyle = '#eaffea'; g.beginPath(); g.arc(0, 0, z, Math.PI, 0);
+      g.lineTo(z, z*1.2); for (let k = 1; k <= 4; k++) g.quadraticCurveTo(z - (k - 0.5)*z*0.5, z*(k%2 ? 0.8 : 1.5), z - k*z*0.5, z*1.2);
+      g.closePath(); g.fill();
+      g.fillStyle = '#140f2e'; for (const sx of [-0.35, 0.35]){ g.beginPath(); g.ellipse(sx*z, -z*0.1, z*0.14, z*0.2, 0, 0, Math.PI*2); g.fill(); }
+      g.beginPath(); g.ellipse(0, z*0.4, z*0.13, z*0.18, 0, 0, Math.PI*2); g.fill();
+    }
     else { g.fillStyle = p.color; g.font = `${p.size*2.4}px sans-serif`; g.textAlign = 'center'; g.fillText('♪', 0, 0); }
     g.restore();
+  }
+  if (ura){
+    const vg = g.createRadialGradient(W/2, H*0.55, Math.min(W, H)*0.3, W/2, H*0.55, Math.max(W, H)*0.75);
+    vg.addColorStop(0, 'rgba(0,0,0,0)'); vg.addColorStop(1, 'rgba(0,0,0,0.6)'); g.fillStyle = vg; g.fillRect(0, 0, W, H);
   }
   // callouts
   for (let i = callouts.length - 1; i >= 0; i--){
@@ -642,13 +721,13 @@ function drawScene(b, dt){
     g.translate(W/2, H*0.16); g.scale(sc, sc); g.rotate(-0.05);
     g.font = `${Math.min(56, W*0.075)}px "Dela Gothic One","Hiragino Sans",sans-serif`; g.textAlign = 'center'; g.textBaseline = 'middle';
     g.lineWidth = 8; g.strokeStyle = '#140f2e'; g.strokeText(c.text, 0, 0);
-    g.fillStyle = '#ffd166'; g.fillText(c.text, 0, 0);
+    g.fillStyle = ura ? '#8cff9e' : '#ffd166'; g.fillText(c.text, 0, 0);
     g.restore();
   }
 }
 
 /* ---------- メインループ（例外が出ても止まらない） ---------- */
-const meta = $('#meta'); let lastMeta = '', lastTs = performance.now();
+const meta = $('#meta'); let lastMeta = '', lastTs = performance.now(), nextGhost = 0;
 function frame(ts){
   requestAnimationFrame(frame);
   try {
@@ -666,11 +745,13 @@ function frame(ts){
         if ((cat === 'mel' || cat === 'voice') && Math.random() < 0.5){ const L = LAY[e.i]; spawn(1, L.x, L.gy - L.R*2.6, 'note', 0.3); }
       }
     }
+    if (ura && T > nextGhost && !reduced){ nextGhost = T + 0.9 + Math.random()*1.2;
+      particles.push({kind:'ghost', x:Math.random()*W, y:H*(0.55 + Math.random()*0.4), vx:(Math.random() - 0.5)*24, vy:-38, life:0, max:4.5, size:9 + Math.random()*9, rot:Math.random()*6, vr:1.6, color:'#eaffea'}); }
     flash *= Math.pow(0.02, dt);
     for (const sl of slots){ sl.hit *= Math.pow(0.002, dt); sl.pop *= Math.pow(0.001, dt); }
     blink.forEach(bk => { if (T > bk.at){ bk.k = 0.1; if (T > bk.at + 0.12){ bk.k = 1; bk.at = T + 2.5 + Math.random()*2.5; } } });
     drawScene(b, dt);
-    const m = playing ? `♩=<b>${bpm}</b> · BAR <b>${mod(Math.floor(b/4), 4) + 1}</b>/4 · <b>${PROG[mod(Math.floor(b/4), 4)].name}</b> · <b>${slots.filter(s => s.sid && !s.muted).length}</b>/7人` + (isFever() ? ' · <b>FEVER</b>' : '')
+    const m = playing ? `♩=<b>${bpm}</b> · BAR <b>${mod(Math.floor(b/4), 4) + 1}</b>/4 · <b>${(ura ? PROG_U : PROG)[mod(Math.floor(b/4), 4)].name}</b> · <b>${slots.filter(s => s.sid && !s.muted).length}</b>/7人` + (isFever() ? ' · <b>FEVER</b>' : '') + (ura ? ' · <b>ウラ</b>' : '')
                       : `Opus 5.5 Groove · ♩=<b>${bpm}</b> · C major`;
     if (m !== lastMeta){ meta.innerHTML = m; lastMeta = m; }
   } catch (err){ console.error(err); }
@@ -749,7 +830,7 @@ $('#random').onclick = () => {
   const free = SOUNDS.map(s => s.id).filter(id => !slots.some(s => s.sid === id)).sort(() => Math.random() - 0.5);
   slots.forEach((sl, i) => { if (!sl.sid && free.length) place(free.pop(), i); });
 };
-$('#reset').onclick = () => { slots.forEach(s => { s.sid = null; s.muted = false; }); refresh(); };
+$('#reset').onclick = () => { slots.forEach(s => { s.sid = null; s.muted = false; }); setUra(false); refresh(); };
 $('#tempo').oninput = e => {
   const v = +e.target.value;
   if (ac && playing){ const now = ac.currentTime; anchor = {time:now, beat:beatAt(now)}; }
